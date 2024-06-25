@@ -68,3 +68,11 @@ export interface AmqplibQueueOptions {
   maxPriority?: number;
   [key: string]: any;
 }
+
+export interface AmqplibExchangeOptions {
+  durable?: boolean | undefined;
+  internal?: boolean | undefined;
+  autoDelete?: boolean | undefined;
+  alternateExchange?: string | undefined;
+  arguments?: any;
+}

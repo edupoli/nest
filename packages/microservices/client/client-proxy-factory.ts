@@ -21,6 +21,7 @@ import { ClientProxy } from './client-proxy';
 import { ClientRedis } from './client-redis';
 import { ClientRMQ } from './client-rmq';
 import { ClientTCP } from './client-tcp';
+import { DiscoveryService, Reflector, ModulesContainer } from '@nestjs/core';
 
 export interface IClientProxyFactory {
   create(clientOptions: ClientOptions): ClientProxy & Closeable;
@@ -45,6 +46,10 @@ export class ClientProxyFactory {
       return new customClass(options);
     }
     const { transport, options } = clientOptions || {};
+    const modulesContainer = new ModulesContainer();
+    const discoveryService = new DiscoveryService(modulesContainer);
+    const reflector = new Reflector();
+
     switch (transport) {
       case Transport.REDIS:
         return new ClientRedis(options as RedisOptions['options']);
@@ -55,7 +60,11 @@ export class ClientProxyFactory {
       case Transport.GRPC:
         return new ClientGrpcProxy(options as GrpcOptions['options']);
       case Transport.RMQ:
-        return new ClientRMQ(options as RmqOptions['options']);
+        return new ClientRMQ(
+          options as RmqOptions['options'],
+          discoveryService,
+          reflector,
+        );
       case Transport.KAFKA:
         return new ClientKafka(options as KafkaOptions['options']);
       default:

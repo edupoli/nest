@@ -14,6 +14,7 @@ import { MqttClientOptions, QoS } from '../external/mqtt-options.interface';
 import { IORedisOptions } from '../external/redis.interface';
 import {
   AmqpConnectionManagerSocketOptions,
+  AmqplibExchangeOptions,
   AmqplibQueueOptions,
   RmqUrl,
 } from '../external/rmq-url.interface';
@@ -224,6 +225,11 @@ export interface RmqOptions {
      * @default -1
      */
     maxConnectionAttempts?: number;
+    exchange?: {
+      name: string;
+      type: 'topic' | 'fanout' | 'direct' | 'headers' | string;
+      options?: AmqplibExchangeOptions;
+    };
   };
 }
 

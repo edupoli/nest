@@ -18,6 +18,7 @@ import {
   DISCONNECT_EVENT,
   DISCONNECTED_RMQ_MESSAGE,
   ERROR_EVENT,
+  PATTERN_METADATA,
   RQM_DEFAULT_IS_GLOBAL_PREFETCH_COUNT,
   RQM_DEFAULT_NO_ASSERT,
   RQM_DEFAULT_NOACK,
@@ -32,6 +33,7 @@ import { ReadPacket, RmqOptions, WritePacket } from '../interfaces';
 import { RmqRecord } from '../record-builders';
 import { RmqRecordSerializer } from '../serializers/rmq-record.serializer';
 import { ClientProxy } from './client-proxy';
+import { DiscoveryService, Reflector } from '@nestjs/core';
 
 // import type {
 //   AmqpConnectionManager,
@@ -64,8 +66,13 @@ export class ClientRMQ extends ClientProxy {
   protected replyQueue: string;
   protected persistent: boolean;
   protected noAssert: boolean;
+  protected exchange: any;
 
-  constructor(protected readonly options: RmqOptions['options']) {
+  constructor(
+    protected readonly options: RmqOptions['options'],
+    private readonly discoveryService: DiscoveryService,
+    private readonly reflector: Reflector,
+  ) {
     super();
     this.urls = this.getOptionsProp(this.options, 'urls') || [RQM_DEFAULT_URL];
     this.queue =
@@ -81,6 +88,7 @@ export class ClientRMQ extends ClientProxy {
       this.getOptionsProp(this.options, 'noAssert') ??
       this.queueOptions.noAssert ??
       RQM_DEFAULT_NO_ASSERT;
+    this.exchange = this.getOptionsProp(this.options, 'exchange');
 
     loadPackage('amqplib', ClientRMQ.name, () => require('amqplib'));
     rmqPackage = loadPackage('amqp-connection-manager', ClientRMQ.name, () =>
@@ -189,8 +197,23 @@ export class ClientRMQ extends ClientProxy {
       this.getOptionsProp(this.options, 'isGlobalPrefetchCount') ||
       RQM_DEFAULT_IS_GLOBAL_PREFETCH_COUNT;
 
+    if (this.exchange) {
+      await channel.assertExchange(
+        this.exchange.name,
+        this.exchange.type,
+        this.exchange.options,
+      );
+    }
+
     if (!this.noAssert) {
       await channel.assertQueue(this.queue, this.queueOptions);
+    }
+
+    if (this.exchange) {
+      const patterns = this.getPatterns();
+      for (const pattern of patterns) {
+        await channel.bindQueue(this.queue, this.exchange.name, pattern);
+      }
     }
     await channel.prefetch(prefetchCount, isGlobalPrefetchCount);
     await this.consumeChannel(channel);
@@ -347,5 +370,26 @@ export class ClientRMQ extends ClientProxy {
     } catch {
       return rawContent;
     }
+  }
+
+  private getPatterns(): string[] {
+    const patterns: string[] = [];
+
+    const controllers = this.discoveryService.getControllers();
+    controllers.forEach(wrapper => {
+      const { instance } = wrapper;
+      const prototype = Object.getPrototypeOf(instance);
+
+      Object.getOwnPropertyNames(prototype).forEach(method => {
+        const methodRef = prototype[method];
+        const pattern = this.reflector.get<string>(PATTERN_METADATA, methodRef);
+
+        if (pattern) {
+          patterns.push(pattern);
+        }
+      });
+    });
+
+    return patterns;
   }
 }
